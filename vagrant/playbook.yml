@@ -1,12 +1,24 @@
 ---
+# ============================================================
+# 🛡️ Playbook Ansible : Sécurisation de l'hôte OWASP Juice Shop
+# ============================================================
+# Ce playbook applique des mesures de sécurité sur un serveur
+# hébergeant OWASP Juice Shop, incluant firewall, reverse proxy,
+# durcissement SSH, suppression d'Apache, certificats TLS, etc.
+# ============================================================
+
 - name: Secure OWASP Juice Shop host
   hosts: all
   become: true
 
   vars:
-    juice_port: 3000
+    juice_port: 3000  # Port sur lequel Juice Shop écoute
 
   tasks:
+
+    # ----------------------------------------------------------
+    # 📦 Installation des paquets nécessaires à la sécurité
+    # ----------------------------------------------------------
     - name: Install required packages
       apt:
         name:
@@ -18,32 +30,44 @@
         state: present
         update_cache: true
 
+    # ----------------------------------------------------------
+    # 🔥 Configuration du pare-feu UFW (ports SSH, HTTP, HTTPS)
+    # ----------------------------------------------------------
     - name: Enable and configure UFW
       ufw:
         rule: allow
         port: "{{ item }}"
         proto: tcp
       loop:
-        - 22
-        - 80
-        - 443
+        - 22    # SSH
+        - 80    # HTTP
+        - 443   # HTTPS
 
     - name: Enable UFW firewall
       ufw:
         state: enabled
 
+    # ----------------------------------------------------------
+    # 🚨 Activation de Fail2ban (protection contre brute-force)
+    # ----------------------------------------------------------
     - name: Configure Fail2ban (default config)
       service:
         name: fail2ban
         enabled: yes
         state: started
 
+    # ----------------------------------------------------------
+    # 📝 Activation d'auditd (audit système)
+    # ----------------------------------------------------------
     - name: Configure auditd
       service:
         name: auditd
         enabled: yes
         state: started
 
+    # ----------------------------------------------------------
+    # 🛑 Désactivation et masquage d'Apache (éviter conflits)
+    # ----------------------------------------------------------
     - name: Disable and stop Apache to prevent port conflicts
       service:
         name: apache2
@@ -55,6 +79,9 @@
         name: apache2
         masked: yes
 
+    # ----------------------------------------------------------
+    # 🧹 Suppression des fichiers de configuration/sites Apache
+    # ----------------------------------------------------------
     - name: Remove Apache default site (000-default.conf)
       file:
         path: /etc/apache2/sites-enabled/000-default.conf
@@ -75,6 +102,9 @@
         path: /var/www/html
         state: absent
 
+    # ----------------------------------------------------------
+    # 🔒 Création d'un certificat TLS auto-signé pour Nginx
+    # ----------------------------------------------------------
     - name: Create self-signed TLS certificate
       command: >
         openssl req -x509 -nodes -days 365 -newkey rsa:2048
@@ -84,6 +114,9 @@
       args:
         creates: /etc/ssl/private/juice.key
 
+    # ----------------------------------------------------------
+    # 🔁 Configuration du reverse proxy Nginx (template Jinja2)
+    # ----------------------------------------------------------
     - name: Create Nginx reverse proxy config
       template:
         src: nginx.j2
@@ -96,20 +129,28 @@
         state: link
       notify: Reload nginx
 
+    # ----------------------------------------------------------
+    # 🚫 Désactivation de la connexion SSH root
+    # ----------------------------------------------------------
     - name: Disable root SSH login
       lineinfile:
         path: /etc/ssh/sshd_config
         regexp: '^PermitRootLogin'
         line: 'PermitRootLogin no'
       notify: Restart SSH
-    
+
+    # ----------------------------------------------------------
+    # 🧹 Suppression du site par défaut Nginx
+    # ----------------------------------------------------------
     - name: Remove Nginx default site
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
       notify: Reload nginx
 
-
+    # ----------------------------------------------------------
+    # 🧽 Nettoyage des paquets inutilisés
+    # ----------------------------------------------------------
     - name: Clean up unused packages
       apt:
         autoremove: yes
@@ -118,51 +159,60 @@
     #############################################################
     # 🔍 Bloc de vérification des mesures de sécurité appliquées
     #############################################################
-
     - name: Force handler execution
       meta: flush_handlers
 
     - name: Verify security hardening measures
       block:
 
+        # Vérification UFW actif et ports ouverts
         - name: Check UFW is active and ports are open
           command: ufw status
           register: ufw_status
           changed_when: false
 
+        # Vérification Fail2ban actif
         - name: Check Fail2ban is running
           service:
             name: fail2ban
             state: started
           register: fail2ban_status
 
+        # Vérification auditd actif
         - name: Check auditd is running
           service:
             name: auditd
             state: started
           register: auditd_status
 
+        # Vérification présence certificat SSL
         - name: Check if SSL cert exists
           stat:
             path: /etc/ssl/certs/juice.crt
           register: ssl_cert
           failed_when: not ssl_cert.stat.exists
 
+        # Vérification syntaxe Nginx OK
         - name: Check Nginx config syntax
           command: nginx -t
           register: nginx_syntax
           failed_when: "'successful' not in nginx_syntax.stderr"
 
+        # Vérification écoute Nginx sur 80/443
         - name: Check Nginx is listening on 80 and 443
           shell: ss -tuln | grep ':80\|:443'
           register: nginx_ports
           changed_when: false
 
+        # Vérification Apache2 bien masqué
         - name: Check Apache2 is masked
           command: systemctl is-enabled apache2
           register: apache_status
           failed_when: "'masked' not in apache_status.stdout"
 
+  # ============================================================
+  # 🔔 Handlers pour recharger les services si besoin
+  # ============================================================
   handlers:
     - name: Reload nginx
       service:

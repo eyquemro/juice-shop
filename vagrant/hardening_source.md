@@ -1,14 +1,13 @@
-# Hardening Measures (ISO 27001 / HDS Mapping)
+## 🔐 Hardening Measures — ISO/IEC 27001:2013 Mapping
 
-| # | Security Measure           | Description                                                | ISO 27001 / HDS |
-|---|----------------------------|------------------------------------------------------------|-----------------|
-| 1 | Non-root user              | Juice Shop runs as a dedicated, non-privileged user        | A.9.2.3         |
-| 2 | UFW Firewall               | Only ports 22, 80, 443 are allowed                         | A.13.1.1        |
-| 3 | Fail2ban                   | Protects SSH from brute-force attacks                      | A.12.4.1        |
-| 4 | HTTPS (self-signed TLS)   | Juice Shop exposed via secure Nginx reverse proxy          | A.13.2.3        |
-| 5 | System log hardening       | Logs are collected and protected via auditd                | A.12.4.3        |
-| 6 | File permission hardening | Juice Shop directory has restricted access (chmod 750)     | A.9.4.1         |
-| 7 | SSH root login disabled    | Access restricted to the vagrant user                      | A.9.2.4         |
-| 8 | Auto-start with systemd    | Juice Shop runs persistently at boot                       | A.12.4.1        |
-| 9 | Removal of unused packages | Reduces attack surface                                     | A.13.1.2        |
-| 10| Nginx reverse proxy        | Isolates Juice Shop and enables TLS termination            | A.13.1.3        |
+These security hardening measures follow the [OWASP Juice Shop Hardening Guide](https://pwning.owasp-juice.shop/part2/hardening.html) and are aligned with ISO/IEC 27001:2013 controls.
+
+| #  | Security Measure               | Description                                                              | ISO/IEC 27001:2013 Control                                 | Reference / Source                                                                 |
+|----|-------------------------------|--------------------------------------------------------------------------|------------------------------------------------------------|------------------------------------------------------------------------------------|
+| 1  | UFW Firewall                   | Only ports 22 (SSH), 80 (HTTP), 443 (HTTPS) are allowed                  | A.13.1.1 – Network controls                                 | [A.13.1.1 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a1311)    |
+| 2  | Fail2ban                       | Detects and blocks brute-force attacks by monitoring SSH logs           | A.12.6.1 – Technical vulnerability management               | [A.12.6.1 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a1261)    |
+| 3  | HTTPS (TLS Certificate)        | Encrypted traffic via Nginx reverse proxy using TLS (SSL)               | A.13.2.3 – Protection of information in transit             | [A.13.2.3 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a1323)    |
+| 4  | System Logging (auditd)        | Logs system events and protects log integrity                           | A.12.4.1 – Event logging                                     | [A.12.4.1 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a1241)    |
+| 5  | SSH Root Login Disabled        | SSH access restricted to non-root users                                 | A.9.2.4 – Management of secret authentication information   | [A.9.2.4 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a924)      |
+| 6  | Removal of Unused Packages     | Reduces system attack surface                                           | A.12.1.2 – Change management                                | [A.12.1.2 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a1212)    |
+| 7  | Nginx Reverse Proxy Isolation  | Isolates Juice Shop and handles secure TLS termination                  | A.13.1.3 – Segregation in networks                          | [A.13.1.3 – iso-docs.com](https://iso-docs.com/blogs/iso-27001-standard#a1313)    |
