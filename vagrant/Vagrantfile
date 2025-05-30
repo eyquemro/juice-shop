@@ -1,14 +1,24 @@
 # Copyright (c) 2014-2025 Bjoern Kimminich & the OWASP Juice Shop contributors.
 # SPDX-License-Identifier: MIT
 
-# -*- mode: ruby -*-
-# vi: set ft=ruby :
-
 Vagrant.configure("2") do |config|
   config.vm.box = "generic/ubuntu2110"
   config.vm.hostname = "juice.sh"
-
+  config.vm.define "juice-shop"
   config.vm.network "private_network", ip: "192.168.56.110"
+
+  # 🔁 Monte le dossier courant (où se trouve le Vagrantfile) dans la VM
+  config.vm.synced_folder ".", "/vagrant"
+
+  # Copie la conf Apache (pas forcément utile ici, conservé pour compatibilité)
   config.vm.provision "file", source: "./default.conf", destination: "/tmp/juice-shop/default.conf"
+
+  # Lancement du script d’installation Docker + Juice Shop
   config.vm.provision :shell, path: "bootstrap.sh"
+
+  # Provision Ansible local à l’intérieur de la VM
+  config.vm.provision "ansible_local" do |ansible|
+    ansible.playbook = "/vagrant/playbook.yml"
+    ansible.compatibility_mode = "2.0"
+  end
 end

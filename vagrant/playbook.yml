@@ -1,0 +1,195 @@
+---
+- name: Secure OWASP Juice Shop host
+  hosts: all
+  become: true
+
+  vars:
+    juice_user: juice
+    juice_path: /opt/juice-shop
+    juice_port: 3000
+
+  tasks:
+    - name: Create a non-root user for Juice Shop
+      user:
+        name: "{{ juice_user }}"
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - ufw
+          - fail2ban
+          - auditd
+        state: present
+        update_cache: true
+
+    - name: Enable and configure UFW
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - 22
+        - 80
+        - 443
+
+    - name: Enable UFW firewall
+      ufw:
+        state: enabled
+
+    - name: Configure Fail2ban (default config)
+      service:
+        name: fail2ban
+        enabled: yes
+        state: started
+
+    - name: Configure auditd
+      service:
+        name: auditd
+        enabled: yes
+        state: started
+
+    - name: Disable and stop Apache to prevent port conflicts
+      service:
+        name: apache2
+        state: stopped
+        enabled: no
+
+    - name: Mask Apache to prevent any restart
+      systemd:
+        name: apache2
+        masked: yes
+
+    - name: Remove Apache default site (000-default.conf)
+      file:
+        path: /etc/apache2/sites-enabled/000-default.conf
+        state: absent
+
+    - name: Remove Apache available site (000-default.conf)
+      file:
+        path: /etc/apache2/sites-available/000-default.conf
+        state: absent
+
+    - name: Remove default Apache index.html if exists
+      file:
+        path: /var/www/html/index.html
+        state: absent
+
+    - name: Clean up Apache document root if unused
+      file:
+        path: /var/www/html
+        state: absent
+
+    - name: Create self-signed TLS certificate
+      command: >
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048
+        -keyout /etc/ssl/private/juice.key
+        -out /etc/ssl/certs/juice.crt
+        -subj "/CN=juice.local"
+      args:
+        creates: /etc/ssl/private/juice.key
+
+    - name: Set permissions on Juice Shop directory
+      file:
+        path: "{{ juice_path }}"
+        owner: "{{ juice_user }}"
+        group: "{{ juice_user }}"
+        recurse: yes
+        mode: '0750'
+      when: juice_path is defined
+
+    - name: Create Nginx reverse proxy config
+      template:
+        src: nginx.j2
+        dest: /etc/nginx/sites-available/juice
+
+    - name: Enable Juice Shop Nginx site
+      file:
+        src: /etc/nginx/sites-available/juice
+        dest: /etc/nginx/sites-enabled/juice
+        state: link
+      notify: Reload nginx
+
+    - name: Disable root SSH login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: Restart SSH
+
+    - name: Clean up unused packages
+      apt:
+        autoremove: yes
+        autoclean: yes
+
+    #############################################################
+    # 🔍 Bloc de vérification des mesures de sécurité appliquées
+    #############################################################
+
+    - name: Force handler execution
+      meta: flush_handlers
+
+    - name: Verify security hardening measures
+      block:
+
+        - name: Check if Juice user exists
+          command: id juice
+          register: juice_user
+          failed_when: juice_user.rc != 0
+
+        - name: Check UFW is active and ports are open
+          command: ufw status
+          register: ufw_status
+          changed_when: false
+
+        - name: Check Fail2ban is running
+          service:
+            name: fail2ban
+            state: started
+          register: fail2ban_status
+
+        - name: Check auditd is running
+          service:
+            name: auditd
+            state: started
+          register: auditd_status
+
+        - name: Check if SSL cert exists
+          stat:
+            path: /etc/ssl/certs/juice.crt
+          register: ssl_cert
+          failed_when: not ssl_cert.stat.exists
+
+        - name: Check if Juice Shop directory has secure permissions
+          stat:
+            path: "{{ juice_path }}"
+          register: juice_dir
+          failed_when: juice_dir.stat.mode != "0750"
+
+        - name: Check Nginx config syntax
+          command: nginx -t
+          register: nginx_syntax
+          failed_when: "'successful' not in nginx_syntax.stderr"
+
+        - name: Check Nginx is listening on 80 and 443
+          shell: ss -tuln | grep ':80\|:443'
+          register: nginx_ports
+          changed_when: false
+
+        - name: Check Apache2 is masked
+          command: systemctl is-enabled apache2
+          register: apache_status
+          failed_when: "'masked' not in apache_status.stdout"
+
+  handlers:
+    - name: Reload nginx
+      service:
+        name: nginx
+        state: restarted
+
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted
