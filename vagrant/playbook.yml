@@ -4,20 +4,13 @@
   become: true
 
   vars:
-    juice_user: juice
-    juice_path: /opt/juice-shop
     juice_port: 3000
 
   tasks:
-    - name: Create a non-root user for Juice Shop
-      user:
-        name: "{{ juice_user }}"
-        shell: /bin/bash
-        create_home: yes
-
     - name: Install required packages
       apt:
         name:
+          - curl
           - nginx
           - ufw
           - fail2ban
@@ -91,15 +84,6 @@
       args:
         creates: /etc/ssl/private/juice.key
 
-    - name: Set permissions on Juice Shop directory
-      file:
-        path: "{{ juice_path }}"
-        owner: "{{ juice_user }}"
-        group: "{{ juice_user }}"
-        recurse: yes
-        mode: '0750'
-      when: juice_path is defined
-
     - name: Create Nginx reverse proxy config
       template:
         src: nginx.j2
@@ -118,6 +102,13 @@
         regexp: '^PermitRootLogin'
         line: 'PermitRootLogin no'
       notify: Restart SSH
+    
+    - name: Remove Nginx default site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
 
     - name: Clean up unused packages
       apt:
@@ -133,11 +124,6 @@
 
     - name: Verify security hardening measures
       block:
-
-        - name: Check if Juice user exists
-          command: id juice
-          register: juice_user
-          failed_when: juice_user.rc != 0
 
         - name: Check UFW is active and ports are open
           command: ufw status
@@ -161,12 +147,6 @@
             path: /etc/ssl/certs/juice.crt
           register: ssl_cert
           failed_when: not ssl_cert.stat.exists
-
-        - name: Check if Juice Shop directory has secure permissions
-          stat:
-            path: "{{ juice_path }}"
-          register: juice_dir
-          failed_when: juice_dir.stat.mode != "0750"
 
         - name: Check Nginx config syntax
           command: nginx -t
